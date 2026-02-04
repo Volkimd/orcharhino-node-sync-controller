@@ -1,136 +1,120 @@
-# node-sync-controller
-// TODO(user): Add simple overview of use/purpose
+# orcharhino Node Sync Controller
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+A Kubernetes controller built with **Kubebuilder** that automatically synchronizes Kubernetes Nodes with the **orcharhino** host management system.
+
+## Overview
+
+This controller monitors the lifecycle of Nodes within a Kubernetes cluster. When a new Node is detected, the controller registers it as a host in orcharhino. When a Node is removed, it ensures the host is cleaned up.
+
+### Key Features
+
+* **Automated Registration:** Detects new Nodes and sends a `POST` request to the orcharhino API.
+* **State Tracking:** Uses the label `orcharhino.de/synced=true` to prevent redundant API calls.
+* **Mock Environment:** Includes a lightweight Go-based API mock for local development and testing without requiring a live orcharhino instance.
+
+---
 
 ## Getting Started
 
 ### Prerequisites
-- go version v1.24.6+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+* Go (v1.22+)
+* Docker (for local cluster testing)
+* `kubectl` and `kind` (or access to a KKP User-cluster)
+* `make`
 
-```sh
-make docker-build docker-push IMG=<some-registry>/node-sync-controller:tag
+### Installation
+
+1. **Clone the repository:**
+```bash
+git clone https://github.com/volkimd/orcharhino-node-sync-controller.git
+cd orcharhino-node-sync-controller
+
 ```
 
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
 
-**Install the CRDs into the cluster:**
-
-```sh
+2. **Install CRDs:**
+```bash
 make install
+
 ```
 
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
 
-```sh
-make deploy IMG=<some-registry>/node-sync-controller:tag
+
+---
+
+## Development & Testing
+
+You can test the controller locally using the provided Mock API.
+
+### 1. Start the Mock API
+
+In a separate terminal, run the mock server:
+
+```bash
+make mock
+
 ```
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
+The mock will start listening at `http://localhost:8080`.
 
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
+### 2. Run the Controller
 
-```sh
-kubectl apply -k config/samples/
+Start the controller locally and point it to your cluster (via `KUBECONFIG`) and the mock server:
+
+```bash
+make run-with-mock
+
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
+### 3. Verify Synchronization
 
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
+* **Check Labels:** Verify that the controller has labeled the nodes:
+```bash
+kubectl get nodes --show-labels | grep orcharhino
 
-```sh
-kubectl delete -k config/samples/
 ```
 
-**Delete the APIs(CRDs) from the cluster:**
 
-```sh
-make uninstall
+* **Check Mock Logs:** The mock server terminal should show:
+`✅ ADD: Node 'node-name' registered.`
+
+---
+
+## Configuration
+
+The controller is configured via environment variables:
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `ORCHARHINO_URL` | Base URL of the orcharhino API | `http://localhost:8080` |
+| `ORCHARHINO_USER` | API Username | `admin` |
+| `ORCHARHINO_PASS` | API Password | `password` |
+
+---
+
+## Project Structure
+
+* `cmd/main.go`: Entry point for the manager.
+* `internal/controller/`: Contains the `NodeReconciler` logic.
+* `test/mock_api.go`: A simple HTTP server simulating the orcharhino REST API.
+* `config/`: Kubernetes manifests (CRDs, RBAC, etc.).
+
+---
+
+## Troubleshooting
+
+**Connection Refused:**
+If you see `dial tcp [::1]:8080: connect: connection refused`, ensure the Mock API is running in another terminal. On some systems (macOS), you may need to explicitly use `127.0.0.1` instead of `localhost`.
+
+**Nodes not syncing:**
+If a Node already has the label `orcharhino.de/synced=true`, the controller will skip it. To force a re-sync, remove the label:
+
+```bash
+kubectl label node <node-name> orcharhino.de/synced-
+
 ```
 
-**UnDeploy the controller from the cluster:**
+---
 
-```sh
-make undeploy
-```
-
-## Project Distribution
-
-Following the options to release and provide this solution to the users.
-
-### By providing a bundle with all YAML files
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/node-sync-controller:tag
-```
-
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
-
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/node-sync-controller/<tag or branch>/dist/install.yaml
-```
-
-### By providing a Helm Chart
-
-1. Build the chart using the optional helm plugin
-
-```sh
-kubebuilder edit --plugins=helm/v2-alpha
-```
-
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
-
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
-
-## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
-
-**NOTE:** Run `make help` for more information on all potential `make` targets
-
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
-
-## License
-
-Copyright 2026.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
-# orcharhino-node-sync-controller
+**Soll ich noch einen speziellen Abschnitt für die KKP-Besonderheiten (wie das Auslesen der IP-Adressen) hinzufügen?**
